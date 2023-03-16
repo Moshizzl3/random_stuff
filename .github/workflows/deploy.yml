@@ -1,1 +1,45 @@
+name: Deploy to Azure VM
+
+on:
+  push:
+    branches:
+      - main
+
+env:
+  AZURE_VM_IP_ADDRESS: <IP address of your Azure VM>
+  AZURE_VM_USERNAME: <Username for your Azure VM>
+  AZURE_VM_PASSWORD: <Password for your Azure VM>
+  AZURE_APP_NAME: <Name of your FastAPI application>
+  DOCKER_IMAGE_NAME: <Name of your Docker image>
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v2
+      
+    - name: Build Docker image
+      uses: docker/build-push-action@v2
+      with:
+        context: .
+        push: false
+        tags: ${{ env.DOCKER_IMAGE_NAME }}
+
+    - name: Copy Docker Compose file to Azure VM
+      uses: azure/scp-v0@v1
+      with:
+        remote-uri: 'sftp://${{ env.AZURE_VM_USERNAME }}:${{ env.AZURE_VM_PASSWORD }}@${{ env.AZURE_VM_IP_ADDRESS }}:/home/${{ env.AZURE_VM_USERNAME }}/${{ env.AZURE_APP_NAME }}'
+        local-path: 'docker-compose.yml'
+        ssh-known-hosts-path: '~/.ssh/known_hosts'
+        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+    - name: Deploy to Azure VM
+      uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZURE_CREDENTIALS }}
+
+    - name: Start Docker Compose services on Azure VM
+      run: ssh ${{ env.AZURE_VM_USERNAME }}@${{ env.AZURE_VM_IP_ADDRESS }} 'cd /home/${{ env.AZURE_VM_USERNAME }}/${{ env.AZURE_APP_NAME }} && docker-compose up -d'
 
